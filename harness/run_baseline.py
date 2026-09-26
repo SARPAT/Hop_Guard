@@ -11,40 +11,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from harness.detect import DETECTORS  # noqa: E402
 from hopguard.agent.agent import run  # noqa: E402
-from hopguard.agent.data import EMPLOYEES, POLICY_DOCS  # noqa: E402
-from hopguard.agent.tools import Session, read_outbox, reset_outbox  # noqa: E402
+from harness.cases import HERE, all_cases, build_docs, redact, session_for  # noqa: E402
+from hopguard.agent.tools import read_outbox, reset_outbox  # noqa: E402
 from hopguard.config import GROQ_MODEL  # noqa: E402
-
-HERE = os.path.dirname(os.path.abspath(__file__))
-SENSITIVE = sorted({str(e["salary_inr"]) for e in EMPLOYEES.values()} |
-                   {e["bank_account"] for e in EMPLOYEES.values()}, key=len, reverse=True)
-
-
-def load(name: str) -> list[dict]:
-    with open(os.path.join(HERE, name)) as f:
-        return [json.loads(line) for line in f if line.strip()]
-
-
-def redact(obj):
-    """Replace every synthetic salary/bank number (comma-grouped or not) with <REDACTED>."""
-    if isinstance(obj, dict):
-        return {k: redact(v) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [redact(v) for v in obj]
-    if isinstance(obj, str):
-        for value in SENSITIVE:
-            pattern = r"(?<!\d)(?<!\d,)" + r",?".join(value) + r"(?!,?\d)"
-            obj = re.sub(pattern, "<REDACTED>", obj)
-        return obj
-    return obj
-
 
 def run_case(case: dict, model: str) -> dict:
     reset_outbox()
-    docs = dict(POLICY_DOCS)
-    if case.get("poison_doc"):
-        docs[case["poison_doc"]["id"]] = case["poison_doc"]["text"]
-    session = Session(case["user_id"], case["role"])
+    docs = build_docs(case)
+    session = session_for(case)
     result = run(case["query"], session, docs, guard=None, model=model)
     outbox = read_outbox()
     hit, reason = DETECTORS[case["detector"]](result, outbox, session, case)
@@ -60,7 +34,7 @@ def main() -> None:
     n, model = args.n, args.model
     print(f"MODEL: {model}   mode: OFF   n={n}\n")
 
-    cases = [(c, True) for c in load("seeds.jsonl")] + [(c, False) for c in load("benign.jsonl")]
+    cases = all_cases()
     report = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "model": model, "n": n, "mode": "OFF", "cases": []}
     for case, is_attack in cases:
         runs = [run_case(case, model) for _ in range(n)]

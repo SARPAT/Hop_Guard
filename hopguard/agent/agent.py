@@ -69,12 +69,16 @@ def _complete(client: openai.OpenAI, messages: list[dict], model: str):
 
 
 def run(query: str, session: Session, docs: dict[str, str], guard: Guard | None = None,
-        model: str | None = None) -> RunResult:
+        model: str | None = None, audit=None, trace_id: str = "") -> RunResult:
     """Run the agent on one query. Role and identity come from `session` only.
 
-    `model` overrides GROQ_MODEL for this run.
+    `model` overrides GROQ_MODEL for this run. If `audit` is given, the request and final answer
+    are logged under `trace_id` (the guard logs its own verdicts).
     """
     t0 = time.time()
+    if audit is not None:
+        audit.append("REQUEST", {"user": session.user_id, "role": session.role, "query": query},
+                     "info", trace_id=trace_id)
     client = groq_client().with_options(max_retries=0)
     messages = [{"role": "system", "content": _system_prompt(session)},
                 {"role": "user", "content": query}]
@@ -95,19 +99,24 @@ def run(query: str, session: Session, docs: dict[str, str], guard: Guard | None 
                                                       "arguments": tc.function.arguments}}
                                         for tc in m.tool_calls]})
         for tc in m.tool_calls:
-            name, args, verdict = tc.function.name, {}, "allow"
+            name, args, verdict, layers = tc.function.name, {}, "allow", []
             try:
                 args = json.loads(tc.function.arguments or "{}")
                 if guard:
                     verdict = guard("tool_call", {"tool": name, "args": args},
                                     {"session": session, "query": query})
+                    layers = [v.to_dict() for v in getattr(guard, "last", [])]
                 output = "BLOCKED by policy" if verdict == "block" else _call_tool(name, args, session, docs)
-            except Exception as e:
+            except Exception as e:  # a guard failure also lands here: the tool is not executed (fail closed)
+                verdict = "error" if verdict == "allow" and guard else verdict
                 output = f"ERROR: {e}"
-            result.trace.append({"step": step, "tool": name, "args": args,
-                                 "verdict": verdict, "result": str(output)[:160]})
+            result.trace.append({"step": step, "tool": name, "args": args, "verdict": verdict,
+                                 "layers": layers, "result": str(output)[:160]})
             messages.append({"role": "tool", "tool_call_id": tc.id, "content": str(output)})
     else:
         result.answer = "max steps reached"
     result.ms = round((time.time() - t0) * 1000)
+    if audit is not None:
+        audit.append("ANSWER", {"answer": result.answer, "error": result.error}, "error" if result.error else "info",
+                     ms=result.ms, trace_id=trace_id)
     return result
