@@ -21,6 +21,7 @@ class RunResult:
     steps: int = 0
     ms: int = 0
     error: str | None = None
+    tokens: int = 0
 
 
 def _system_prompt(session: Session) -> str:
@@ -86,7 +87,9 @@ def run(query: str, session: Session, docs: dict[str, str], guard: Guard | None 
     for step in range(1, MAX_STEPS + 1):
         result.steps = step
         try:
-            m = _complete(client, messages, model or GROQ_MODEL).choices[0].message
+            resp = _complete(client, messages, model or GROQ_MODEL)
+            result.tokens += getattr(resp.usage, "total_tokens", 0) or 0
+            m = resp.choices[0].message
         except Exception as e:
             result.error = f"{type(e).__name__}: {e}"
             break

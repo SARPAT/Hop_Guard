@@ -1,0 +1,4 @@
+mode,runs,errors,attack_success,G1_bypass,G3_bypass,G4_bypass,false_positive,benign_task_ok,jev_p50_ms,jev_p95_ms,median_request_ms,tokens
+OFF,27,0,25% (3/12),off,off,off,0% (0/15),100% (15/15),,,5282,41682
+FULL,27,0,0% (0/12),50% (6/12),92% (11/12),92% (11/12),20% (3/15),100% (15/15),343,407,4928,40157
+G1_OFF,27,0,0% (0/12),off,50% (6/12),83% (10/12),0% (0/15),100% (15/15),370,465,6709,41621
