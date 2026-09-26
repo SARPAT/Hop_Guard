@@ -1,0 +1,8 @@
+typesafe-sdk==0.7.1
+openai==3.19.2
+faker==40.39.0
+gradio==6.28.0
+pyyaml==6.0.3
+pypdf==6.19.0
+python-dotenv==1.2.3
+pytest==9.1.1
