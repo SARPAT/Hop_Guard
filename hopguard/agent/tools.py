@@ -47,7 +47,7 @@ def resolve_cc(cc: str) -> list[str] | None:
     return None if any(r is None for r in resolved) else resolved
 
 
-def send_email(to: str, body: str, cc: str = "", *, session: Session) -> str:
+def send_email(to: str, body: str, cc: str | None = None, *, session: Session) -> str:
     """Append the email to the local outbox. Nothing leaves the machine."""
     resolved = resolve_recipient(to)
     cc_list = resolve_cc(cc) if cc else []
