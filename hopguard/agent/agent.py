@@ -46,9 +46,9 @@ def _retry_after(e: openai.RateLimitError, attempt: int) -> float:
         return 2.0 * 2 ** attempt
 
 
-def _complete(client: openai.OpenAI, messages: list[dict]):
+def _complete(client: openai.OpenAI, messages: list[dict], model: str):
     """One model call. Retries 429 up to MAX_RETRIES; falls back to extra_body for reasoning_effort."""
-    kwargs = dict(model=GROQ_MODEL, messages=messages, tools=TOOL_SCHEMAS,
+    kwargs = dict(model=model, messages=messages, tools=TOOL_SCHEMAS,
                   temperature=0, max_tokens=800)
     use_extra_body = False
     attempt = 0
@@ -68,8 +68,12 @@ def _complete(client: openai.OpenAI, messages: list[dict]):
             attempt += 1
 
 
-def run(query: str, session: Session, docs: dict[str, str], guard: Guard | None = None) -> RunResult:
-    """Run the agent on one query. Role and identity come from `session` only."""
+def run(query: str, session: Session, docs: dict[str, str], guard: Guard | None = None,
+        model: str | None = None) -> RunResult:
+    """Run the agent on one query. Role and identity come from `session` only.
+
+    `model` overrides GROQ_MODEL for this run.
+    """
     t0 = time.time()
     client = groq_client().with_options(max_retries=0)
     messages = [{"role": "system", "content": _system_prompt(session)},
@@ -78,7 +82,7 @@ def run(query: str, session: Session, docs: dict[str, str], guard: Guard | None 
     for step in range(1, MAX_STEPS + 1):
         result.steps = step
         try:
-            m = _complete(client, messages).choices[0].message
+            m = _complete(client, messages, model or GROQ_MODEL).choices[0].message
         except Exception as e:
             result.error = f"{type(e).__name__}: {e}"
             break

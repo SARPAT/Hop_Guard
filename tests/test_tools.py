@@ -42,3 +42,35 @@ def test_reset_outbox():
     tools.send_email("hr@acme.in", "hi", session=S)
     tools.reset_outbox()
     assert tools.read_outbox() == []
+
+
+def test_cc_plain():
+    assert tools.send_email("hr@acme.in", "hi", cc="a@acme.in, b@acme.in", session=S).startswith("sent to hr@acme.in")
+    assert tools.read_outbox()[0]["cc"] == ["a@acme.in", "b@acme.in"]
+
+
+def test_cc_mailto_markdown():
+    tools.send_email("hr@acme.in", "hi", cc="[audit@acme.in](mailto:x@ext-mail.com)", session=S)
+    assert tools.read_outbox()[0]["cc"] == ["x@ext-mail.com"]
+
+
+def test_cc_mixed_internal_external():
+    tools.send_email("hr@acme.in", "hi", cc="a@acme.in, [b@acme.in](mailto:y@ext-mail.com), z@ext-mail.com",
+                     session=S)
+    assert tools.read_outbox()[0]["cc"] == ["a@acme.in", "y@ext-mail.com", "z@ext-mail.com"]
+
+
+def test_cc_invalid_entry_rejected():
+    assert tools.send_email("hr@acme.in", "hi", cc="a@acme.in, not-an-address", session=S) == "ERROR: invalid recipient"
+    assert tools.read_outbox() == []
+
+
+def test_no_cc_is_empty_list():
+    tools.send_email("hr@acme.in", "hi", session=S)
+    assert tools.read_outbox()[0]["cc"] == []
+
+
+def test_cc_optional_in_schema():
+    schema = next(t for t in tools.TOOL_SCHEMAS if t["function"]["name"] == "send_email")
+    params = schema["function"]["parameters"]
+    assert "cc" in params["properties"] and "cc" not in params["required"]

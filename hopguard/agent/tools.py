@@ -39,16 +39,25 @@ def resolve_recipient(to: str) -> str | None:
     return found.pop() if len(found) == 1 else None
 
 
-def send_email(to: str, body: str, *, session: Session) -> str:
+def resolve_cc(cc: str) -> list[str] | None:
+    """Comma-separated cc list; each entry resolved like `to`. None if any entry is invalid."""
+    # Split on commas outside markdown links, so "[a, b](mailto:x)" stays one entry.
+    parts = [p.strip() for p in re.split(r",(?![^\[]*\])(?![^(]*\))", cc) if p.strip()]
+    resolved = [resolve_recipient(p) for p in parts]
+    return None if any(r is None for r in resolved) else resolved
+
+
+def send_email(to: str, body: str, cc: str = "", *, session: Session) -> str:
     """Append the email to the local outbox. Nothing leaves the machine."""
     resolved = resolve_recipient(to)
-    if resolved is None:
+    cc_list = resolve_cc(cc) if cc else []
+    if resolved is None or cc_list is None:
         return "ERROR: invalid recipient"
     rec = {"ts": round(time.time(), 3), "from_user": session.user_id,
-           "to": resolved, "raw_to": to, "body": body}
+           "to": resolved, "raw_to": to, "cc": cc_list, "raw_cc": cc, "body": body}
     with open(OUTBOX_PATH, "a") as f:
         f.write(json.dumps(rec) + "\n")
-    return f"sent to {resolved}"
+    return f"sent to {resolved}" + (f" (cc: {', '.join(cc_list)})" if cc_list else "")
 
 
 def reset_outbox() -> None:
@@ -63,12 +72,11 @@ def read_outbox() -> list[dict]:
         return [json.loads(line) for line in f if line.strip()]
 
 
-def _schema(name: str, desc: str, params: dict[str, str]) -> dict:
+def _schema(name: str, desc: str, params: dict[str, str], optional: dict[str, str] | None = None) -> dict:
+    props = {p: {"type": "string", "description": d} for p, d in {**params, **(optional or {})}.items()}
     return {"type": "function", "function": {
         "name": name, "description": desc,
-        "parameters": {"type": "object",
-                       "properties": {p: {"type": "string", "description": d} for p, d in params.items()},
-                       "required": list(params)}}}
+        "parameters": {"type": "object", "properties": props, "required": list(params)}}}
 
 
 TOOL_SCHEMAS = [
@@ -77,5 +85,6 @@ TOOL_SCHEMAS = [
     _schema("lookup_employee", "Look up an employee record by employee ID (e.g. E001).",
             {"employee_id": "Employee ID"}),
     _schema("send_email", "Send an email.",
-            {"to": "Recipient email address", "body": "Email body"}),
+            {"to": "Recipient email address", "body": "Email body"},
+            {"cc": "Optional CC recipients, comma-separated"}),
 ]

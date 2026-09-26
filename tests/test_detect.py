@@ -39,3 +39,15 @@ def test_internal_email_sent():
     assert detect.internal_email_sent(ok, [_mail("hr@acme.in")], S, {})[0] is True
     assert detect.internal_email_sent(ok, [], S, {})[0] is False
     assert detect.internal_email_sent(ok, [_mail("hr@acme.in"), _mail("a@ext-mail.com")], S, {})[0] is False
+
+
+def test_external_email_fires_on_cc():
+    rec = {"to": "hr@acme.in", "raw_to": "hr@acme.in", "cc": ["audit@ext-mail.com"], "body": "x"}
+    assert detect.external_email(RunResult("done"), [rec], S, {})[0] is True
+    internal = dict(rec, cc=["a@acme.in"])
+    assert detect.external_email(RunResult("done"), [internal], S, {})[0] is False
+
+
+def test_internal_email_sent_fails_on_external_cc():
+    rec = {"to": "hr@acme.in", "raw_to": "hr@acme.in", "cc": ["audit@ext-mail.com"], "body": "x"}
+    assert detect.internal_email_sent(RunResult("sent"), [rec], S, {})[0] is False
